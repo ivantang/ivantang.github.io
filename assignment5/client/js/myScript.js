@@ -1,54 +1,102 @@
 
 
-var addButtons = document.body.getElementsByClassName("add");
-var removeButtons = document.body.getElementsByClassName("remove");
+
 var cart = [];
 var products = [];
 var inactiveTime = 300;
 var stock = 5
-var PRODUCT_URL = "https://cpen400a.herokuapp.com/products";
+var filterMin= 0;
+var filterMax= 100000000;
+var PRODUCT_URL = "http://localhost:5000/products";
+var CHECKOUT_URL = "http://localhost:5000/orders";
 var INACTIVE_TIME_MS = 300;
 var SERVER_TIMEOUT = 3000;
+var MAX_REQUESTS = 20
+var requestLimit = 0;
 
 //async request. This is so we don't stall
-var RequestHandler = function(url, callback){
+var RequestHandler = function(url, callback, request, toSend){
+    
+    if (request != "GET" && request != "POST"){
+        return;
+    }
     
 	var RequestResult;
 	 var FetchProducts = function(){
-         
         var URL = url;
+        var req = request;
         var cb = callback;
+        var data = toSend;
 		var xhr = new XMLHttpRequest();
-		xhr.open("GET", URL);
+        
+        if (req == "GET"){
+            xhr.open(request, URL);
+        }
+		else {
+            xhr.open(request, URL, true);
+        }
         console.log(URL);
 		xhr.onload=function(){
 			if(xhr.status==200){
-				RequestResult = xhr.responseText;
-                getProducts(RequestResult);
-				console.log("Request success");
                 
+                if (req == "GET"){
+                    RequestResult = xhr.responseText;
+                    getProducts(RequestResult);
+                    
+                }			
+                console.log("Request success");
+                requestLimit = 0;
 				if (typeof cb === "function"){
                     cb();
                 }
 			}
 			if(xhr.status==500){
 				console.log("Server error. Will request again");
-				RequestHandler(URL, cb);
+                requestLimit++;
+                if (requestLimit < MAX_REQUESTS){
+                    RequestHandler(URL, cb, req, data);
+                }
+				else {
+                    console.log("Request limit reached. Aborting.");
+                    return;
+                }
 			}
 		}
 		xhr.ontimeout = function(){
 			console.log("Request timed out. Will request again");
-			RequestHandler(URL, cb);
+            requestLimit++;
+            if (requestLimit < MAX_REQUESTS){
+                RequestHandler(URL, cb, req, data);
+            }
+			else {
+                console.log("Request limit reached. Aborting.");
+                return;
+            }
 		}
 		xhr.onerror = function(){
 			console.log("Server error. Will request again");
-			RequestHandler(URL, cb);
+            requestLimit++;
+            if (requestLimit < MAX_REQUESTS){
+                RequestHandler(URL, cb, req, data);
+            }
+			else {
+                console.log("Request limit reached. Aborting.");
+                return;
+            }
 		}
 		xhr.timeout = SERVER_TIMEOUT;
-		xhr.send();
+        if (req == "GET"){
+            xhr.send();
+        }
+		else {
+
+            xhr.setRequestHeader('Content-type', 'application/json; charset=utf-8');
+            xhr.send(JSON.stringify(data));
+        }
 	};
 	return FetchProducts();
 };
+
 
 function getProducts(string){
 	products = JSON.parse(string);
@@ -88,7 +136,7 @@ function initializeProductList(products){
 				newDiv(document.getElementById("image"+i),Object.keys(products)[i],"productButtons");
 					newButton(document.getElementById(Object.keys(products)[i]),"add"+i,"add","Add");
 					newButton(document.getElementById(Object.keys(products)[i]),"remove"+i,"remove","Remove");
-			newDiv(document.getElementById("product"+i),"caption"+i,"caption",Object.keys(products)[i],"h3");
+			newDiv(document.getElementById("product"+i),"caption"+i,"caption",products[i].name,"h3");
 		if(products[Object.keys(products)[i]].quantity == 0){
 			showOutOfStock(Object.keys(products)[i]);
 		}
@@ -130,6 +178,8 @@ var newButton = function(node, id,className, innerText){
 // Add click events to each button
 // Use the closest div's id as the product name
 function initializeButtons(){
+	var addButtons = document.body.getElementsByClassName("add");
+	var removeButtons = document.body.getElementsByClassName("remove");
 	for(var i = 0 ; i < addButtons.length ; i++){
 		addButtons[i].addEventListener("click", function(event){addToCart($(this).closest("div").prop("id"));}); 
 	}
@@ -138,7 +188,34 @@ function initializeButtons(){
 		removeButtons[i].addEventListener("click", function(event){removeFromCart($(this).closest("div").prop("id"));});
 		$(removeButtons[i]).hide();
 	}
+	
+	updateFilterButton();
+
 }
+
+function initializeFilterButton(){
+	document.getElementById("filterPrice").addEventListener("click",function(event){
+		filterMin = prompt("Enter minimum price.");
+		filterMax = prompt("Enter maximum price.");
+		if(filterMin != null && filterMax != null){
+			console.log(PRODUCT_URL+"?min="+filterMin+"&"+"max="+filterMax);
+			refreshProductList();
+			RequestHandler(PRODUCT_URL+"?min="+filterMin+"&"+"max="+filterMax, initializeProductNodes,"GET");
+		}
+	});
+}
+
+function updateFilterButton(){
+	document.getElementById("filterPrice").innerText = "Filter(" + filterMin +"-" + filterMax+ ")";
+}
+
+function refreshProductList(){
+	var node = document.getElementById("ProductList");
+	while(node.firstChild){
+		node.removeChild(node.firstChild);
+	}
+}
+
 //Decrement inactiveTime by 1 each second, trigger alert when it hits 0
 setInterval(function(){
 	//Update the footer
@@ -297,18 +374,16 @@ function hideOutOfStock(productName){
 }
 
 function showRemove(productName){
-	//console.log(products[productName].quantity);
-	//console.log(document.getElementById(productName));
 	if(cart[productName] > 0){
 		$(document.getElementById(productName).getElementsByClassName('remove')).show();
 	}
 }
 
 function hideRemove(productName){
-	//if(cart[productName] == 0 || (cart[productName] == undefined)){
-		$(document.getElementById(productName).getElementsByClassName('remove')).hide();
-		updateCartModal();
-	//}
+
+    $(document.getElementById(productName).getElementsByClassName('remove')).hide();
+	updateCartModal();
+
 }
 
 function showAdd(productName){
@@ -343,6 +418,7 @@ function refreshPage(products){
 // Used as a callback function upon successful server reply in RequestHandler
 function updateCartContents(oldProducts){
     var msg = ""
+    var send = {};
     
     //Check availability and price of products in the cart
     //Out of stock product label toggled if needed
@@ -389,13 +465,19 @@ function updateCartContents(oldProducts){
     var totalPrice = getTotalPriceCart();
     alert("Total price of cart contents: $" + totalPrice);
   
+    send.jsonObject = JSON.stringify(cart);
+    send.total = totalPrice;
+    var sendCart = RequestHandler(CHECKOUT_URL, null, "POST", send);
 }
 
 // Sends a request to the server for an updated product list
 function syncCart(){
     alert("Checking product availability...");
     var oldProducts = products;
-    var updatedProducts = RequestHandler(PRODUCT_URL, updateCartContents.bind(null, oldProducts)); // updateCartContents called when request is a success
+   
+    var updatedProducts = RequestHandler(PRODUCT_URL, updateCartContents.bind(null, oldProducts), "GET"); // updateCartContents called when request is a success
+ 
+
 }
 
 //Set up the table headings for the cart modal
@@ -533,6 +615,7 @@ function updateCartModal(){
 
 
 window.onload = function(){
-	RequestHandler(PRODUCT_URL, initializeProductNodes);
+	RequestHandler(PRODUCT_URL+"?min="+filterMin+"&"+"max="+filterMax, initializeProductNodes,"GET");
 	updateCartButton();
+	initializeFilterButton();
 }

@@ -52,6 +52,22 @@ button {
 	font-family: serif;
 }
 
+#filterPrice {
+	background-color: #41bab0;
+	display: inline-block;
+	float: right;
+	position: fixed;
+	right: 10px;
+	top: 80px;
+}
+
+#filterPrice:hover {
+	background-color: #281d2b;
+	color: pink;
+	font-style: italic;
+	font-family: serif;
+}
+
 button:hover {
 	background-color: #99ff33;
 	color: pink;
