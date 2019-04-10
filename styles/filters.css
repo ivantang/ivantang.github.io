@@ -1,0 +1,30 @@
+.filter {
+  color: #b6b6b6;
+  text-align: center;
+}
+
+.filter-buttons{
+  text-align: center;
+}
+
+.filter-buttons button {
+  background-color: black;
+  border: 1px solid black;
+  color: white;
+  padding: 10px 24px;
+  cursor: pointer;
+  margin-left: 1em;
+  margin-right: 1em;
+  margin-bottom: 3em;
+}
+
+.filter-buttons:after {
+  content: "";
+  clear: both;
+  display: table;
+}
+
+/* Add a background color on hover */
+.filter-buttons button:hover {
+  background-color: #414141;
+}

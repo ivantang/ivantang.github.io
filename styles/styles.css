@@ -1,0 +1,13 @@
+@import "filters.css";
+@import "launch.css";
+
+body {
+  background-color: #414141;
+  color: black;
+  font-family: "Calibri";
+}
+
+.title {
+  color: white;
+  text-align: center;
+}
